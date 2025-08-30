@@ -98,3 +98,4 @@ InitTestScene*.unity*
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 TALLER1_G52/ProjectSettings/SceneTemplateSettings.json
+TALLER1_G52/ProjectSettings/EditorBuildSettings.asset
