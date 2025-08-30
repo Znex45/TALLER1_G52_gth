@@ -1,8 +1,4 @@
-﻿// ========================================
-// ControladorDeLaEscena.cs
-// Orquestador: UI + Pila + Corrutinas + JSON
-// ========================================
-
+﻿
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -22,16 +18,13 @@ public class ControladorDeLaEscena : MonoBehaviour
     [SerializeField] string NombreArchivoCatalogo = "productos.txt";
     [SerializeField, Min(0.1f)] float CicloGeneracionSeg = 1f;
 
-    // Datos
     private List<PlantillaProducto> _catalogo = new();
     private Stack<InstanciaProducto> _pila = new();
 
-    // Corrutinas / estado
     private Coroutine _coGeneracion;
     private Coroutine _coDespacho;
     private bool _corriendo = false;
 
-    // Métricas
     private DateTime _inicioUTC;
     private int _totalGenerados = 0;
     private int _totalDespachados = 0;
@@ -43,7 +36,6 @@ public class ControladorDeLaEscena : MonoBehaviour
     private Dictionary<TipoProducto, int> _generadosPorTipo = new();
     private Dictionary<TipoProducto, int> _despachadosPorTipo = new();
 
-    // ===== Ciclo de vida =====
     void Awake()
     {
         if (ButtonIniciar) ButtonIniciar.onClick.AddListener(Iniciar);
@@ -58,7 +50,6 @@ public class ControladorDeLaEscena : MonoBehaviour
 
     void Start()
     {
-        // LECTURA SIMPLE desde producto.cs (como tu UsarPersona)
         _catalogo = ProductoCatalogoSimple.LeerCatalogo(NombreArchivoCatalogo);
 
         if (_catalogo.Count == 0)
@@ -67,7 +58,6 @@ public class ControladorDeLaEscena : MonoBehaviour
             Utilidades.SetTexto(TextEstado, $"Catálogo cargado ({_catalogo.Count}). Presiona Iniciar.");
     }
 
-    // ===== Controles =====
     public void Iniciar()
     {
         if (_corriendo) { Utilidades.SetTexto(TextEstado, "Ya está corriendo."); return; }
@@ -112,7 +102,6 @@ public class ControladorDeLaEscena : MonoBehaviour
                 Utilidades.FormatoTipos(_generadosPorTipo, _despachadosPorTipo);
         }
 
-        // JSON final
         var porTipo = new List<Utilidades.TipoKV>();
         foreach (var k in _generadosPorTipo.Keys)
         {
@@ -142,13 +131,12 @@ public class ControladorDeLaEscena : MonoBehaviour
         Utilidades.SetTexto(TextEstado, $"⏹️ Simulación detenida. JSON: {path}");
     }
 
-    // ===== Corrutinas =====
     private IEnumerator LoopGeneracion()
     {
         int serie = 0;
         while (_corriendo)
         {
-            int cantidad = UnityEngine.Random.Range(1, 4); // 1–3 por ciclo
+            int cantidad = UnityEngine.Random.Range(1, 4);
             for (int i = 0; i < cantidad; i++)
             {
                 var plantilla = _catalogo[UnityEngine.Random.Range(0, _catalogo.Count)];
@@ -173,7 +161,7 @@ public class ControladorDeLaEscena : MonoBehaviour
         {
             if (_pila.Count == 0) { yield return null; continue; }
 
-            var prod = _pila.Pop(); // LIFO
+            var prod = _pila.Pop();
             float t = Mathf.Max(0f, prod.Tiempo);
             yield return new WaitForSeconds(t);
 
@@ -188,8 +176,6 @@ public class ControladorDeLaEscena : MonoBehaviour
             Utilidades.SetTexto(TextEstado, $"Despachado: {prod.Nombre} ({t:F2}s) | Pila: {_pila.Count}");
         }
     }
-
-    // ===== Utils =====
     private void ResetEstado()
     {
         _pila.Clear();
