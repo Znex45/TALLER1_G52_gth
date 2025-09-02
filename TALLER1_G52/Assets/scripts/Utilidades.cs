@@ -27,10 +27,17 @@ public static class Utilidades
     public static string GuardarJSON<T>(T data, string prefijo = "reporte_pila")
     {
         string json = JsonUtility.ToJson(data, true);
-        string dir = Application.persistentDataPath;
-        string file = $"{prefijo}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
+        string dir = Application.streamingAssetsPath; // <<-- now saves into StreamingAssets
+        string file = prefijo + "_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss") + ".json";
         string path = Path.Combine(dir, file);
-        File.WriteAllText(path, json);
+        try
+        {
+            File.WriteAllText(path, json);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Error saving JSON: " + e.Message);
+        }
         return path;
     }
 
@@ -52,3 +59,4 @@ public static class Utilidades
         return sb.ToString();
     }
 }
+
