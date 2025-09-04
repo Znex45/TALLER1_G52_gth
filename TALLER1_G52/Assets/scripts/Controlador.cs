@@ -13,10 +13,12 @@ public class ControladorDeLaEscena : MonoBehaviour
     [SerializeField] TMP_Text TextEstado;
     [SerializeField] TMP_Text TextMetricas;
 
-    // NEW: references for the panels in the scene
-    [SerializeField] TMP_Text TextPila; // assign Text (TMP) PILA (panel morado)
-    [SerializeField] TMP_Text TextDespachadorProducto; // assign Text (TMP) producto (panel naranja)
-    [SerializeField] TMP_Text TextDespachadorTemporizador; // assign Text (TMP) temporizador (panel naranja)
+    [SerializeField] TMP_Text TextPila;
+    [SerializeField] TMP_Text TextDespachadorProducto;
+    [SerializeField] TMP_Text TextDespachadorTemporizador;
+
+    // NUEVO: referencia al ScrollRect del panel pila
+    [SerializeField] ScrollRect ScrollRectPila;
 
     [Header("Parámetros")]
     [SerializeField] string NombreArchivoCatalogo = "productos.txt";
@@ -65,7 +67,6 @@ public class ControladorDeLaEscena : MonoBehaviour
         else
             Utilidades.SetTexto(TextEstado, $"Catalogo cargado ({_catalogo.Count}). Presiona Iniciar.");
 
-        // ensure UI initial state
         UpdatePilaUI();
         if (TextDespachadorProducto) TextDespachadorProducto.text = "---";
         if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
@@ -116,7 +117,6 @@ public class ControladorDeLaEscena : MonoBehaviour
                 Utilidades.FormatoTipos(_generadosPorTipo, _despachadosPorTipo);
         }
 
-        // JSON final
         var porTipo = new List<Utilidades.TipoKV>();
         foreach (var k in _generadosPorTipo.Keys)
         {
@@ -152,7 +152,7 @@ public class ControladorDeLaEscena : MonoBehaviour
         int serie = 0;
         while (_corriendo)
         {
-            int cantidad = UnityEngine.Random.Range(1, 4); // 1-3 por ciclo
+            int cantidad = UnityEngine.Random.Range(1, 4);
             for (int i = 0; i < cantidad; i++)
             {
                 var plantilla = _catalogo[UnityEngine.Random.Range(0, _catalogo.Count)];
@@ -178,20 +178,18 @@ public class ControladorDeLaEscena : MonoBehaviour
         {
             if (_pila.Count == 0)
             {
-                // nothing to dispatch now
                 if (TextDespachadorProducto) TextDespachadorProducto.text = "---";
                 if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
                 yield return null;
                 continue;
             }
 
-            var prod = _pila.Pop(); // LIFO
+            var prod = _pila.Pop();
             UpdatePilaUI();
 
             float t = Mathf.Max(0f, prod.Tiempo);
             if (TextDespachadorProducto) TextDespachadorProducto.text = prod.Nombre;
 
-            // countdown so UI shows remaining time; step 0.1s
             float remaining = t;
             while (remaining > 0f && _corriendo)
             {
@@ -202,13 +200,11 @@ public class ControladorDeLaEscena : MonoBehaviour
 
             if (!_corriendo)
             {
-                // user stopped while dispatching: put product back on top and exit
                 _pila.Push(prod);
                 UpdatePilaUI();
                 yield break;
             }
 
-            // dispatch finished
             _totalDespachados++;
             if (!_despachadosPorTipo.ContainsKey(prod.Tipo)) _despachadosPorTipo[prod.Tipo] = 0;
             _despachadosPorTipo[prod.Tipo]++;
@@ -219,7 +215,6 @@ public class ControladorDeLaEscena : MonoBehaviour
 
             Utilidades.SetTexto(TextEstado, $"Despachado: {prod.Nombre} ({t:F2}s) | Pila: {_pila.Count}");
 
-            // small reset for despachador fields
             if (TextDespachadorProducto) TextDespachadorProducto.text = (_pila.Count > 0) ? _pila.Peek().Nombre : "---";
             if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
         }
@@ -242,24 +237,36 @@ public class ControladorDeLaEscena : MonoBehaviour
             _despachadosPorTipo[k] = 0;
         }
 
-        // reset UI
         UpdatePilaUI();
         if (TextDespachadorProducto) TextDespachadorProducto.text = "---";
         if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
         if (TextMetricas) TextMetricas.text = "";
     }
 
+    // ===== Update UI Pila (con scroll condicional) =====
     private void UpdatePilaUI()
     {
         if (TextPila == null) return;
-        var arr = _pila.ToArray(); // top at index 0
+
+        var arr = _pila.ToArray();
         System.Text.StringBuilder sb = new();
         for (int i = 0; i < arr.Length; i++)
         {
-            // show top first
             sb.AppendLine($"{i + 1}. {arr[i].Nombre} ({arr[i].IdUnico})");
         }
         TextPila.text = sb.ToString();
+
+        if (ScrollRectPila != null)
+        {
+            Canvas.ForceUpdateCanvases();
+
+            // Solo auto-scroll si ya estabas casi abajo
+            if (ScrollRectPila.verticalNormalizedPosition <= 0.05f)
+            {
+                ScrollRectPila.verticalNormalizedPosition = 0f;
+            }
+        }
     }
 }
+
 
