@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Controlador.cs
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -8,175 +9,176 @@ using TMPro;
 public class ControladorDeLaEscena : MonoBehaviour
 {
     [Header("UI")]
-    [SerializeField] Button ButtonIniciar;
-    [SerializeField] Button ButtonCerrarInteraccion;
-    [SerializeField] TMP_Text TextEstado;
-    [SerializeField] TMP_Text TextMetricas;
+    public Button ButtonIniciar;
+    public Button ButtonCerrarInteraccion;
+    public TMP_Text TextEstado;
+    public TMP_Text TextMetricas;
 
-    [SerializeField] TMP_Text TextPila;
-    [SerializeField] TMP_Text TextDespachadorProducto;
-    [SerializeField] TMP_Text TextDespachadorTemporizador;
+    public TMP_Text TextPila;
+    public TMP_Text TextDespachadorProducto;
+    public TMP_Text TextDespachadorTemporizador;
 
-    // NUEVO: referencia al ScrollRect del panel pila
-    [SerializeField] ScrollRect ScrollRectPila;
+    public ScrollRect ScrollRectPila;
 
-    [Header("Parámetros")]
-    [SerializeField] string NombreArchivoCatalogo = "productos.txt";
-    [SerializeField, Min(0.1f)] float CicloGeneracionSeg = 1f;
+    [Header("Parametros")]
+    public string NombreArchivoCatalogo = "productos.txt";
+    public float CicloGeneracionSeg = 2.5f; // intervalo entre generaciones (2.5s)
 
-    // Datos
-    private List<PlantillaProducto> _catalogo = new();
-    private Stack<InstanciaProducto> _pila = new();
+    // catálogo y pila
+    List<PlantillaProducto> catalogo = new List<PlantillaProducto>();
+    Stack<InstanciaProducto> pila = new Stack<InstanciaProducto>();
 
-    // Corrutinas / estado
-    private Coroutine _coGeneracion;
-    private Coroutine _coDespacho;
-    private bool _corriendo = false;
+    // coroutines / estado
+    Coroutine coGeneracion;
+    Coroutine coDespacho;
+    bool corriendo = false;
 
-    // Métricas
-    private DateTime _inicioUTC;
-    private int _totalGenerados = 0;
-    private int _totalDespachados = 0;
-    private int _maxAlturaPila = 0;
-    private float _sumaTiempoDespacho = 0f;
-    private float _pesoTotalDespachado = 0f;
-    private float _ingresoTotalDespachado = 0f;
+    // producto en proceso (para evitar inconsistencias si se cierra mientras despacha)
+    InstanciaProducto productoEnProceso = null;
 
-    private Dictionary<TipoProducto, int> _generadosPorTipo = new();
-    private Dictionary<TipoProducto, int> _despachadosPorTipo = new();
+    // métricas
+    DateTime inicioUTC;
+    int totalGenerados = 0;
+    int totalDespachados = 0;
+    int maxAlturaPila = 0;
+    float sumaTiempoDespacho = 0f;
+    float pesoTotalDespachado = 0f;
+    float ingresoTotalDespachado = 0f;
 
-    // ===== Ciclo de vida =====
+    Dictionary<TipoProducto, int> generadosPorTipo = new Dictionary<TipoProducto, int>();
+    Dictionary<TipoProducto, int> despachadosPorTipo = new Dictionary<TipoProducto, int>();
+
     void Awake()
     {
-        if (ButtonIniciar) ButtonIniciar.onClick.AddListener(Iniciar);
-        if (ButtonCerrarInteraccion) ButtonCerrarInteraccion.onClick.AddListener(CerrarInteraccion);
+        if (ButtonIniciar != null) ButtonIniciar.onClick.AddListener(Iniciar);
+        if (ButtonCerrarInteraccion != null) ButtonCerrarInteraccion.onClick.AddListener(CerrarInteraccion);
 
-        foreach (TipoProducto k in Enum.GetValues(typeof(TipoProducto)))
+        foreach (TipoProducto t in Enum.GetValues(typeof(TipoProducto)))
         {
-            _generadosPorTipo[k] = 0;
-            _despachadosPorTipo[k] = 0;
+            generadosPorTipo[t] = 0;
+            despachadosPorTipo[t] = 0;
         }
     }
 
     void Start()
     {
-        _catalogo = ProductoCatalogoSimple.LeerCatalogo(NombreArchivoCatalogo);
-
-        if (_catalogo.Count == 0)
-            Utilidades.SetTexto(TextEstado, "Catalogo vacio o no encontrado.");
+        catalogo = ProductoCatalogoSimple.LeerCatalogo(NombreArchivoCatalogo);
+        if (catalogo == null || catalogo.Count == 0)
+        {
+            if (TextEstado != null) TextEstado.text = "No se cargó el catálogo.";
+        }
         else
-            Utilidades.SetTexto(TextEstado, $"Catalogo cargado ({_catalogo.Count}). Presiona Iniciar.");
+        {
+            if (TextEstado != null) TextEstado.text = $"Catalogo ({catalogo.Count}) listo.";
+        }
 
         UpdatePilaUI();
         if (TextDespachadorProducto) TextDespachadorProducto.text = "---";
         if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
     }
 
-    // ===== Controles =====
     public void Iniciar()
     {
-        if (_corriendo) { Utilidades.SetTexto(TextEstado, "Ya esta corriendo."); return; }
-        if (_catalogo.Count == 0) { Utilidades.SetTexto(TextEstado, "No hay catalogo."); return; }
+        if (corriendo) return;
+        if (catalogo == null || catalogo.Count == 0) { if (TextEstado) TextEstado.text = "Catalogo vacío."; return; }
 
         ResetEstado();
+        corriendo = true;
+        inicioUTC = DateTime.UtcNow;
+        coGeneracion = StartCoroutine(LoopGeneracion());
+        coDespacho = StartCoroutine(LoopDespacho());
 
-        _corriendo = true;
-        _inicioUTC = DateTime.UtcNow;
-
-        _coGeneracion = StartCoroutine(LoopGeneracion());
-        _coDespacho = StartCoroutine(LoopDespacho());
-
-        Utilidades.SetTexto(TextEstado, "Simulacion iniciada.");
-        if (TextMetricas) TextMetricas.text = "";
+        if (TextEstado) TextEstado.text = "Simulación iniciada.";
     }
 
     public void CerrarInteraccion()
     {
-        if (!_corriendo) { Utilidades.SetTexto(TextEstado, "No hay simulacion activa."); return; }
+        if (!corriendo) return;
+        corriendo = false;
 
-        _corriendo = false;
-        if (_coGeneracion != null) StopCoroutine(_coGeneracion);
-        if (_coDespacho != null) StopCoroutine(_coDespacho);
+        if (coGeneracion != null) StopCoroutine(coGeneracion);
 
-        float duracion = (float)(DateTime.UtcNow - _inicioUTC).TotalSeconds;
-        float promedio = _totalDespachados > 0 ? (_sumaTiempoDespacho / _totalDespachados) : 0f;
+        // Si había un producto en proceso, devolverlo a la pila para mantener coherencia
+        if (productoEnProceso != null)
+        {
+            pila.Push(productoEnProceso);
+            productoEnProceso = null;
+            UpdatePilaUI();
+        }
 
-        if (TextMetricas)
+        if (coDespacho != null) StopCoroutine(coDespacho);
+
+        // calcular métricas finales
+        float duracion = (float)(DateTime.UtcNow - inicioUTC).TotalSeconds;
+        float promedio = totalDespachados > 0 ? (sumaTiempoDespacho / totalDespachados) : 0f;
+
+        if (TextMetricas != null)
         {
             TextMetricas.text =
                 "== METRICAS FINALES ==\n" +
                 $"Duracion: {duracion:F1} s\n" +
-                $"Generados: {_totalGenerados}\n" +
-                $"Despachados: {_totalDespachados}\n" +
-                $"En Pila: {_pila.Count}\n" +
-                $"Altura Maxima Pila: {_maxAlturaPila}\n" +
+                $"Generados: {totalGenerados}\n" +
+                $"Despachados: {totalDespachados}\n" +
+                $"En Pila: {pila.Count}\n" +
+                $"Altura Maxima Pila: {maxAlturaPila}\n" +
                 $"Tiempo Promedio Despacho: {promedio:F2} s\n" +
-                $"Peso Total Despachado: {_pesoTotalDespachado:F2}\n" +
-                $"Ingreso Total Despachado: ${_ingresoTotalDespachado:F2}\n" +
-                "Por Tipo (Generados / Despachados):\n" +
-                Utilidades.FormatoTipos(_generadosPorTipo, _despachadosPorTipo);
+                $"Peso Total Despachado: {pesoTotalDespachado:F2} kg\n" +
+                $"Ingreso Total Despachado: ${ingresoTotalDespachado:F2}\n";
         }
 
-        var porTipo = new List<Utilidades.TipoKV>();
-        foreach (var k in _generadosPorTipo.Keys)
-        {
-            porTipo.Add(new Utilidades.TipoKV
-            {
-                tipo = k.ToString(),
-                generados = _generadosPorTipo[k],
-                despachados = _despachadosPorTipo.ContainsKey(k) ? _despachadosPorTipo[k] : 0
-            });
-        }
-
+        // Guardar reporte mínimo
         var reporte = new Utilidades.ReporteFinal
         {
             fechaUTC = DateTime.UtcNow.ToString("o"),
             duracionSeg = duracion,
-            generados = _totalGenerados,
-            despachados = _totalDespachados,
-            enPila = _pila.Count,
-            maxAlturaPila = _maxAlturaPila,
+            generados = totalGenerados,
+            despachados = totalDespachados,
+            enPila = pila.Count,
+            maxAlturaPila = maxAlturaPila,
             tiempoPromedioDespacho = promedio,
-            pesoTotalDespachado = _pesoTotalDespachado,
-            ingresoTotalDespachado = _ingresoTotalDespachado,
-            porTipo = porTipo
+            pesoTotalDespachado = pesoTotalDespachado,
+            ingresoTotalDespachado = ingresoTotalDespachado
         };
 
         string path = Utilidades.GuardarJSON(reporte, "reporte_pila");
-        Utilidades.SetTexto(TextEstado, $"Simulacion detenida. JSON: {path}");
+        if (TextEstado) TextEstado.text = $"Simulación detenida. JSON: {path}";
     }
 
-    // ===== Corrutinas =====
-    private IEnumerator LoopGeneracion()
+    // === Corrutinas ===
+
+    IEnumerator LoopGeneracion()
     {
         int serie = 0;
-        while (_corriendo)
+        while (corriendo)
         {
-            int cantidad = UnityEngine.Random.Range(1, 4);
+            // genera aleatoriamente entre 1 y 3 productos por ciclo
+            int cantidad = UnityEngine.Random.Range(1, 4); // 1..3 inclusive
             for (int i = 0; i < cantidad; i++)
             {
-                var plantilla = _catalogo[UnityEngine.Random.Range(0, _catalogo.Count)];
-                string idUnico = $"{plantilla.Id}-{DateTime.UtcNow.Ticks}-{serie++}";
-                var inst = new InstanciaProducto(plantilla, idUnico);
+                var plantilla = catalogo[UnityEngine.Random.Range(0, catalogo.Count)];
+                string id = $"{plantilla.Id}-{DateTime.UtcNow.Ticks}-{serie++}";
+                var inst = new InstanciaProducto(plantilla, id);
 
-                _pila.Push(inst);
-                _totalGenerados++;
-                _generadosPorTipo[inst.Tipo]++;
+                pila.Push(inst);
+                totalGenerados++;
+                generadosPorTipo[inst.Tipo]++;
 
-                if (_pila.Count > _maxAlturaPila) _maxAlturaPila = _pila.Count;
+                if (pila.Count > maxAlturaPila) maxAlturaPila = pila.Count;
             }
 
             UpdatePilaUI();
-            Utilidades.SetTexto(TextEstado, $"Generados: {cantidad} | Altura pila: {_pila.Count}");
+            if (TextEstado) TextEstado.text = $"Generados: {cantidad} | Altura pila: {pila.Count}";
+
+            // espera entre ciclos (configurable)
             yield return new WaitForSeconds(CicloGeneracionSeg);
         }
     }
 
-    private IEnumerator LoopDespacho()
+    IEnumerator LoopDespacho()
     {
-        while (_corriendo)
+        while (corriendo)
         {
-            if (_pila.Count == 0)
+            if (pila.Count == 0)
             {
                 if (TextDespachadorProducto) TextDespachadorProducto.text = "---";
                 if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
@@ -184,57 +186,92 @@ public class ControladorDeLaEscena : MonoBehaviour
                 continue;
             }
 
-            var prod = _pila.Pop();
+            // siempre sacamos de la pila actual con Pop() (LIFO)
+            var prod = pila.Pop();
+            productoEnProceso = prod; // marcamos que está siendo procesado
             UpdatePilaUI();
 
             float t = Mathf.Max(0f, prod.Tiempo);
             if (TextDespachadorProducto) TextDespachadorProducto.text = prod.Nombre;
 
-            float remaining = t;
-            while (remaining > 0f && _corriendo)
+            float restante = t;
+            while (restante > 0f && corriendo)
             {
-                if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = $"{remaining:F1}s";
+                if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = $"{restante:F1}s";
                 yield return new WaitForSeconds(0.1f);
-                remaining -= 0.1f;
+                restante -= 0.1f;
             }
 
-            if (!_corriendo)
+            if (!corriendo)
             {
-                _pila.Push(prod);
+                // si se interrumpe, devolvemos el producto a la pila
+                pila.Push(prod);
+                productoEnProceso = null;
                 UpdatePilaUI();
                 yield break;
             }
 
-            _totalDespachados++;
-            if (!_despachadosPorTipo.ContainsKey(prod.Tipo)) _despachadosPorTipo[prod.Tipo] = 0;
-            _despachadosPorTipo[prod.Tipo]++;
+            // despacho finalizado: contabilizamos
+            totalDespachados++;
+            if (!despachadosPorTipo.ContainsKey(prod.Tipo)) despachadosPorTipo[prod.Tipo] = 0;
+            despachadosPorTipo[prod.Tipo]++;
 
-            _sumaTiempoDespacho += t;
-            _pesoTotalDespachado += prod.Peso;
-            _ingresoTotalDespachado += prod.Precio;
+            sumaTiempoDespacho += t;
+            pesoTotalDespachado += prod.Peso;
+            ingresoTotalDespachado += prod.Precio;
 
-            Utilidades.SetTexto(TextEstado, $"Despachado: {prod.Nombre} ({t:F2}s) | Pila: {_pila.Count}");
+            if (TextEstado) TextEstado.text = $"Despachado: {prod.Nombre} ({t:F2}s)";
 
-            if (TextDespachadorProducto) TextDespachadorProducto.text = (_pila.Count > 0) ? _pila.Peek().Nombre : "---";
+            productoEnProceso = null; // limpieza
+            if (TextDespachadorProducto) TextDespachadorProducto.text = (pila.Count > 0) ? pila.Peek().Nombre : "---";
             if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
         }
     }
 
-    // ===== Utils =====
-    private void ResetEstado()
+    // === UI Pila ===
+    private void UpdatePilaUI()
     {
-        _pila.Clear();
-        _totalGenerados = 0;
-        _totalDespachados = 0;
-        _maxAlturaPila = 0;
-        _sumaTiempoDespacho = 0f;
-        _pesoTotalDespachado = 0f;
-        _ingresoTotalDespachado = 0f;
+        if (TextPila == null) return;
 
-        foreach (TipoProducto k in Enum.GetValues(typeof(TipoProducto)))
+        var arr = pila.ToArray();
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        for (int i = 0; i < arr.Length; i++)
         {
-            _generadosPorTipo[k] = 0;
-            _despachadosPorTipo[k] = 0;
+            // Extraemos el ID original del txt desde IdUnico (antes del primer '-')
+            string plantillaId = arr[i].IdUnico;
+            if (!string.IsNullOrEmpty(plantillaId) && plantillaId.Contains("-"))
+                plantillaId = plantillaId.Split(new char[] { '-' }, 2)[0];
+
+            // Mostrar: Nombre | Tipo | Peso | Precio | (ID del txt)
+            sb.AppendLine($"{i + 1}. {arr[i].Nombre} | {arr[i].Tipo} | {arr[i].Peso}kg | ${arr[i].Precio} | ({plantillaId})");
+        }
+        TextPila.text = sb.ToString();
+
+        if (ScrollRectPila != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            if (ScrollRectPila.verticalNormalizedPosition <= 0.05f)
+            {
+                ScrollRectPila.verticalNormalizedPosition = 0f;
+            }
+        }
+    }
+
+    void ResetEstado()
+    {
+        pila.Clear();
+        totalGenerados = 0;
+        totalDespachados = 0;
+        maxAlturaPila = 0;
+        sumaTiempoDespacho = 0f;
+        pesoTotalDespachado = 0f;
+        ingresoTotalDespachado = 0f;
+        productoEnProceso = null;
+
+        foreach (TipoProducto t in Enum.GetValues(typeof(TipoProducto)))
+        {
+            generadosPorTipo[t] = 0;
+            despachadosPorTipo[t] = 0;
         }
 
         UpdatePilaUI();
@@ -242,31 +279,8 @@ public class ControladorDeLaEscena : MonoBehaviour
         if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
         if (TextMetricas) TextMetricas.text = "";
     }
-
-    // ===== Update UI Pila (con scroll condicional) =====
-    private void UpdatePilaUI()
-    {
-        if (TextPila == null) return;
-
-        var arr = _pila.ToArray();
-        System.Text.StringBuilder sb = new();
-        for (int i = 0; i < arr.Length; i++)
-        {
-            sb.AppendLine($"{i + 1}. {arr[i].Nombre} ({arr[i].IdUnico})");
-        }
-        TextPila.text = sb.ToString();
-
-        if (ScrollRectPila != null)
-        {
-            Canvas.ForceUpdateCanvases();
-
-            // Solo auto-scroll si ya estabas casi abajo
-            if (ScrollRectPila.verticalNormalizedPosition <= 0.05f)
-            {
-                ScrollRectPila.verticalNormalizedPosition = 0f;
-            }
-        }
-    }
 }
+
+
 
 
