@@ -237,10 +237,28 @@ public class ControladorDeLaEscena : MonoBehaviour
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
         for (int i = 0; i < arr.Length; i++)
         {
-            // Extraemos el ID original del txt desde IdUnico (antes del primer '-')
-            string plantillaId = arr[i].IdUnico;
-            if (!string.IsNullOrEmpty(plantillaId) && plantillaId.Contains("-"))
-                plantillaId = plantillaId.Split(new char[] { '-' }, 2)[0];
+            // --- CORRECCIÓN: extraer correctamente el ID de plantilla (p. ej. "P-001")
+            string plantillaId = arr[i].IdUnico ?? "";
+
+            if (!string.IsNullOrEmpty(plantillaId))
+            {
+                int last = plantillaId.LastIndexOf('-');
+                if (last > 0)
+                {
+                    int prev = plantillaId.LastIndexOf('-', last - 1);
+                    if (prev > 0)
+                    {
+                        // Si hay al menos dos '-' -> la plantillaId es todo hasta prev (excluyendo el '-' de prev)
+                        plantillaId = plantillaId.Substring(0, prev);
+                    }
+                    else
+                    {
+                        // Solo un '-' encontrado (caso raro) -> tomar lo que está antes del último '-'
+                        plantillaId = plantillaId.Substring(0, last);
+                    }
+                }
+                // si no hay '-' dejamos el id completo
+            }
 
             // Mostrar: Nombre | Tipo | Peso | Precio | (ID del txt)
             sb.AppendLine($"{i + 1}. {arr[i].Nombre} | {arr[i].Tipo} | {arr[i].Peso}kg | ${arr[i].Precio} | ({plantillaId})");
@@ -280,6 +298,7 @@ public class ControladorDeLaEscena : MonoBehaviour
         if (TextMetricas) TextMetricas.text = "";
     }
 }
+
 
 
 
