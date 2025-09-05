@@ -1,49 +1,23 @@
-using System;
 using UnityEngine;
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Globalization;
 
 public enum TipoProducto { Basico, Fragil, Pesado, Otro }
 
 [Serializable]
 public class PlantillaProducto
 {
-    public string IdPlantilla; 
+    public string Id;
     public string Nombre;
     public TipoProducto Tipo;
     public float Peso;
     public float Precio;
     public float Tiempo; 
 
-    public static bool TryParse(string line, out PlantillaProducto t)
-    {
-        t = null;
-        if (string.IsNullOrWhiteSpace(line)) return false;
-
-        var parts = line.Split('|');
-        if (parts.Length < 6) return false;
-
-
-        var tipoStr = parts[2].Trim().ToLowerInvariant();
-        var tipo = TipoProducto.Otro;
-        if (tipoStr.Contains("basico")) tipo = TipoProducto.Basico;
-        else if (tipoStr.Contains("fragi")) tipo = TipoProducto.Fragil;
-        else if (tipoStr.Contains("pesad")) tipo = TipoProducto.Pesado;
-
-        var ci = System.Globalization.CultureInfo.InvariantCulture;
-        if (!float.TryParse(parts[3].Trim(), System.Globalization.NumberStyles.Float, ci, out float peso)) return false;
-        if (!float.TryParse(parts[4].Trim(), System.Globalization.NumberStyles.Float, ci, out float precio)) return false;
-        if (!float.TryParse(parts[5].Trim(), System.Globalization.NumberStyles.Float, ci, out float tiempo)) return false;
-
-        t = new PlantillaProducto
-        {
-            IdPlantilla = parts[0].Trim(),
-            Nombre = parts[1].Trim(),
-            Tipo = tipo,
-            Peso = peso,
-            Precio = precio,
-            Tiempo = Mathf.Max(0f, tiempo),
-        };
-        return true;
-    }
+    public override string ToString()
+        => $"{Id} | {Nombre} | {Tipo} | {Peso}kg | ${Precio} | {Tiempo}s";
 }
 
 [Serializable]
@@ -54,18 +28,84 @@ public class InstanciaProducto
     public TipoProducto Tipo;
     public float Peso;
     public float Precio;
-    public float Tiempo; 
+    public float Tiempo;
     public DateTime GeneradoUTC;
 
-    public InstanciaProducto(PlantillaProducto t, string idGenerado)
+    public InstanciaProducto(PlantillaProducto p, string idGenerado)
     {
         IdUnico = idGenerado;
-        Nombre = t.Nombre;
-        Tipo = t.Tipo;
-        Peso = t.Peso;
-        Precio = t.Precio;
-        Tiempo = t.Tiempo;
+        Nombre = p.Nombre;
+        Tipo = p.Tipo;
+        Peso = p.Peso;
+        Precio = p.Precio;
+        Tiempo = p.Tiempo;
         GeneradoUTC = DateTime.UtcNow;
     }
 }
 
+public static class ProductoCatalogoSimple
+{
+    public static List<PlantillaProducto> LeerCatalogo(string fileName)
+    {
+        List<PlantillaProducto> lista = new List<PlantillaProducto>();
+        string path = Path.Combine(Application.streamingAssetsPath, fileName);
+
+        if (!File.Exists(path))
+        {
+            Debug.LogError("No se encontró el archivo: " + path);
+            return lista;
+        }
+
+        try
+        {
+            string contenido = File.ReadAllText(path);
+            using (StringReader reader = new StringReader(contenido))
+            {
+                string line;
+                var ci = CultureInfo.InvariantCulture;
+
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    if (line.TrimStart().StartsWith("#")) continue;
+
+                    string[] parts = line.Split('|');
+                    if (parts.Length < 6)
+                    {
+                        Debug.LogWarning("Línea inválida: " + line);
+                        continue;
+                    }
+
+                    TipoProducto tipo = TipoProducto.Otro;
+                    string t = parts[2].Trim().ToLowerInvariant();
+                    if (t.Contains("basico")) tipo = TipoProducto.Basico;
+                    else if (t.Contains("fragil") || t.Contains("frágil")) tipo = TipoProducto.Fragil;
+                    else if (t.Contains("pesad")) tipo = TipoProducto.Pesado;
+
+
+                    if (!float.TryParse(parts[3].Trim(), NumberStyles.Float, ci, out float peso)) { Debug.LogWarning("Peso inválido: " + line); continue; }
+                    if (!float.TryParse(parts[4].Trim(), NumberStyles.Float, ci, out float precio)) { Debug.LogWarning("Precio inválido: " + line); continue; }
+                    if (!float.TryParse(parts[5].Trim(), NumberStyles.Float, ci, out float tiempo)) { Debug.LogWarning("Tiempo inválido: " + line); continue; }
+
+                    var p = new PlantillaProducto
+                    {
+                        Id = parts[0].Trim(),
+                        Nombre = parts[1].Trim(),
+                        Tipo = tipo,
+                        Peso = peso,
+                        Precio = precio,
+                        Tiempo = Mathf.Max(0f, tiempo),
+                    };
+
+                    lista.Add(p);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Error leyendo catálogo: " + e.Message);
+        }
+
+        return lista;
+    }
+}
