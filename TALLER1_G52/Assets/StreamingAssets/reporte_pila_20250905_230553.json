@@ -1,0 +1,33 @@
+{
+    "fechaUTC": "2025-09-05T23:05:53.5584438Z",
+    "duracionSeg": 29.94974708557129,
+    "generados": 65,
+    "despachados": 10,
+    "enPila": 54,
+    "maxAlturaPila": 55,
+    "tiempoPromedioDespacho": 2.9000000953674318,
+    "pesoTotalDespachado": 21.48000144958496,
+    "ingresoTotalDespachado": 2517.650146484375,
+    "porTipo": [
+        {
+            "tipo": "Basico",
+            "generados": 11,
+            "despachados": 2
+        },
+        {
+            "tipo": "Fragil",
+            "generados": 21,
+            "despachados": 3
+        },
+        {
+            "tipo": "Pesado",
+            "generados": 33,
+            "despachados": 5
+        },
+        {
+            "tipo": "Otro",
+            "generados": 0,
+            "despachados": 0
+        }
+    ]
+}

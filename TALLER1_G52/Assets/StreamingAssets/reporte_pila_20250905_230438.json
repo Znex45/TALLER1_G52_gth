@@ -1,27 +1,27 @@
 {
-    "fechaUTC": "2025-09-05T19:42:50.0376933Z",
-    "duracionSeg": 17.260644912719728,
-    "generados": 36,
+    "fechaUTC": "2025-09-05T23:04:38.5546872Z",
+    "duracionSeg": 942.1934204101563,
+    "generados": 44,
     "despachados": 5,
-    "enPila": 30,
-    "maxAlturaPila": 30,
-    "tiempoPromedioDespacho": 3.0,
-    "pesoTotalDespachado": 15.770000457763672,
-    "ingresoTotalDespachado": 1641.52001953125,
+    "enPila": 38,
+    "maxAlturaPila": 38,
+    "tiempoPromedioDespacho": 3.200000047683716,
+    "pesoTotalDespachado": 13.90999984741211,
+    "ingresoTotalDespachado": 1296.3800048828125,
     "porTipo": [
         {
             "tipo": "Basico",
-            "generados": 7,
+            "generados": 17,
             "despachados": 2
         },
         {
             "tipo": "Fragil",
-            "generados": 14,
+            "generados": 11,
             "despachados": 1
         },
         {
             "tipo": "Pesado",
-            "generados": 15,
+            "generados": 16,
             "despachados": 2
         },
         {
