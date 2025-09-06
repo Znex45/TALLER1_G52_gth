@@ -1,0 +1,11 @@
+{
+    "fechaUTC": "2025-09-06T04:35:44.0236318Z",
+    "duracionSeg": 16.433998107910158,
+    "generados": 30,
+    "despachados": 4,
+    "enPila": 26,
+    "maxAlturaPila": 25,
+    "tiempoPromedioDespacho": 3.0,
+    "pesoTotalDespachado": 8.149999618530274,
+    "ingresoTotalDespachado": 486.25
+}
