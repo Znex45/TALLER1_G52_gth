@@ -1,5 +1,4 @@
-﻿// Controlador.cs
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -14,7 +13,9 @@ public class ControladorDeLaEscena : MonoBehaviour
     public TMP_Text TextEstado;
     public TMP_Text TextMetricas;
 
+
     public TMP_Text TextPila;
+
     public TMP_Text TextDespachadorProducto;
     public TMP_Text TextDespachadorTemporizador;
 
@@ -22,21 +23,20 @@ public class ControladorDeLaEscena : MonoBehaviour
 
     [Header("Parametros")]
     public string NombreArchivoCatalogo = "productos.txt";
-    public float CicloGeneracionSeg = 2.5f; // intervalo entre generaciones (2.5s)
+    public float CicloGeneracionSeg = 2.5f; // 2.5s por ciclo
 
-    // catálogo y pila
+
     List<PlantillaProducto> catalogo = new List<PlantillaProducto>();
     Stack<InstanciaProducto> pila = new Stack<InstanciaProducto>();
 
-    // coroutines / estado
+
     Coroutine coGeneracion;
     Coroutine coDespacho;
     bool corriendo = false;
 
-    // producto en proceso (para evitar inconsistencias si se cierra mientras despacha)
     InstanciaProducto productoEnProceso = null;
 
-    // métricas
+
     DateTime inicioUTC;
     int totalGenerados = 0;
     int totalDespachados = 0;
@@ -98,7 +98,6 @@ public class ControladorDeLaEscena : MonoBehaviour
 
         if (coGeneracion != null) StopCoroutine(coGeneracion);
 
-        // Si había un producto en proceso, devolverlo a la pila para mantener coherencia
         if (productoEnProceso != null)
         {
             pila.Push(productoEnProceso);
@@ -108,7 +107,6 @@ public class ControladorDeLaEscena : MonoBehaviour
 
         if (coDespacho != null) StopCoroutine(coDespacho);
 
-        // calcular métricas finales
         float duracion = (float)(DateTime.UtcNow - inicioUTC).TotalSeconds;
         float promedio = totalDespachados > 0 ? (sumaTiempoDespacho / totalDespachados) : 0f;
 
@@ -126,7 +124,6 @@ public class ControladorDeLaEscena : MonoBehaviour
                 $"Ingreso Total Despachado: ${ingresoTotalDespachado:F2}\n";
         }
 
-        // Guardar reporte mínimo
         var reporte = new Utilidades.ReporteFinal
         {
             fechaUTC = DateTime.UtcNow.ToString("o"),
@@ -144,15 +141,14 @@ public class ControladorDeLaEscena : MonoBehaviour
         if (TextEstado) TextEstado.text = $"Simulación detenida. JSON: {path}";
     }
 
-    // === Corrutinas ===
 
     IEnumerator LoopGeneracion()
     {
         int serie = 0;
         while (corriendo)
         {
-            // genera aleatoriamente entre 1 y 3 productos por ciclo
-            int cantidad = UnityEngine.Random.Range(1, 4); // 1..3 inclusive
+
+            int cantidad = UnityEngine.Random.Range(1, 4); 
             for (int i = 0; i < cantidad; i++)
             {
                 var plantilla = catalogo[UnityEngine.Random.Range(0, catalogo.Count)];
@@ -169,7 +165,7 @@ public class ControladorDeLaEscena : MonoBehaviour
             UpdatePilaUI();
             if (TextEstado) TextEstado.text = $"Generados: {cantidad} | Altura pila: {pila.Count}";
 
-            // espera entre ciclos (configurable)
+
             yield return new WaitForSeconds(CicloGeneracionSeg);
         }
     }
@@ -186,9 +182,9 @@ public class ControladorDeLaEscena : MonoBehaviour
                 continue;
             }
 
-            // siempre sacamos de la pila actual con Pop() (LIFO)
+
             var prod = pila.Pop();
-            productoEnProceso = prod; // marcamos que está siendo procesado
+            productoEnProceso = prod; 
             UpdatePilaUI();
 
             float t = Mathf.Max(0f, prod.Tiempo);
@@ -204,14 +200,14 @@ public class ControladorDeLaEscena : MonoBehaviour
 
             if (!corriendo)
             {
-                // si se interrumpe, devolvemos el producto a la pila
+
                 pila.Push(prod);
                 productoEnProceso = null;
                 UpdatePilaUI();
                 yield break;
             }
 
-            // despacho finalizado: contabilizamos
+
             totalDespachados++;
             if (!despachadosPorTipo.ContainsKey(prod.Tipo)) despachadosPorTipo[prod.Tipo] = 0;
             despachadosPorTipo[prod.Tipo]++;
@@ -222,57 +218,113 @@ public class ControladorDeLaEscena : MonoBehaviour
 
             if (TextEstado) TextEstado.text = $"Despachado: {prod.Nombre} ({t:F2}s)";
 
-            productoEnProceso = null; // limpieza
+            productoEnProceso = null; 
             if (TextDespachadorProducto) TextDespachadorProducto.text = (pila.Count > 0) ? pila.Peek().Nombre : "---";
             if (TextDespachadorTemporizador) TextDespachadorTemporizador.text = "";
         }
     }
 
-    // === UI Pila ===
+
     private void UpdatePilaUI()
     {
-        if (TextPila == null) return;
+
+        if (TextPila != null) TextPila.gameObject.SetActive(false);
+        if (ScrollRectPila == null || ScrollRectPila.content == null) return;
+
+        var content = ScrollRectPila.content;
+
+
+        var vlg = content.GetComponent<VerticalLayoutGroup>();
+        if (vlg == null) vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = false;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+        vlg.spacing = 8f;
+        vlg.padding = new RectOffset(10, 10, 10, 10);
+
+        var fitter = content.GetComponent<ContentSizeFitter>();
+        if (fitter == null) fitter = content.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+
+        for (int i = content.childCount - 1; i >= 0; i--)
+            Destroy(content.GetChild(i).gameObject);
+
 
         var arr = pila.ToArray();
-        System.Text.StringBuilder sb = new System.Text.StringBuilder();
         for (int i = 0; i < arr.Length; i++)
         {
-            // --- CORRECCIÓN: extraer correctamente el ID de plantilla (p. ej. "P-001")
-            string plantillaId = arr[i].IdUnico ?? "";
+            var prod = arr[i];
 
+            string plantillaId = prod.IdUnico ?? "";
             if (!string.IsNullOrEmpty(plantillaId))
             {
                 int last = plantillaId.LastIndexOf('-');
                 if (last > 0)
                 {
                     int prev = plantillaId.LastIndexOf('-', last - 1);
-                    if (prev > 0)
-                    {
-                        // Si hay al menos dos '-' -> la plantillaId es todo hasta prev (excluyendo el '-' de prev)
-                        plantillaId = plantillaId.Substring(0, prev);
-                    }
-                    else
-                    {
-                        // Solo un '-' encontrado (caso raro) -> tomar lo que está antes del último '-'
-                        plantillaId = plantillaId.Substring(0, last);
-                    }
+                    if (prev > 0) plantillaId = plantillaId.Substring(0, prev);
+                    else if (last > 0) plantillaId = plantillaId.Substring(0, last);
                 }
-                // si no hay '-' dejamos el id completo
             }
 
-            // Mostrar: Nombre | Tipo | Peso | Precio | (ID del txt)
-            sb.AppendLine($"{i + 1}. {arr[i].Nombre} | {arr[i].Tipo} | {arr[i].Peso}kg | ${arr[i].Precio} | ({plantillaId})");
-        }
-        TextPila.text = sb.ToString();
 
-        if (ScrollRectPila != null)
-        {
-            Canvas.ForceUpdateCanvases();
-            if (ScrollRectPila.verticalNormalizedPosition <= 0.05f)
+            var goItem = new GameObject($"Item_{i + 1}", typeof(RectTransform));
+            goItem.transform.SetParent(content, false);
+            var leItem = goItem.AddComponent<LayoutElement>();
+            leItem.minHeight = 20f;
+
+ 
+            var goTxt = new GameObject("Info", typeof(RectTransform));
+            goTxt.transform.SetParent(goItem.transform, false);
+            var tmp = goTxt.AddComponent<TextMeshProUGUI>();
+            tmp.enableWordWrapping = true;
+            tmp.fontSize = 24;
+            tmp.text = $"{i + 1}. {prod.Nombre} | {prod.Tipo} | {prod.Peso}kg | ${prod.Precio} | ({plantillaId})";
+            var tmpLE = goTxt.AddComponent<LayoutElement>();
+            tmpLE.preferredHeight = -1;
+
+
+            var tex = Utilidades.CargarTexturaProducto(prod.Nombre);
+            var goImg = new GameObject("Imagen", typeof(RectTransform));
+            goImg.transform.SetParent(goItem.transform, false);
+            var raw = goImg.AddComponent<RawImage>();
+            var imgLE = goImg.AddComponent<LayoutElement>();
+
+            if (tex != null)
             {
-                ScrollRectPila.verticalNormalizedPosition = 0f;
+                raw.texture = tex;
+                raw.raycastTarget = false;
+
+
+                float anchoDeseado = 200f;
+                float altoCalculado = 250f;
+
+                imgLE.preferredWidth = anchoDeseado;
+                imgLE.preferredHeight = altoCalculado;
             }
+            else
+            {
+                imgLE.preferredHeight = 0f;
+                imgLE.minHeight = 0f;
+            }
+
+
+            var itemV = goItem.AddComponent<VerticalLayoutGroup>();
+            itemV.childControlHeight = true;
+            itemV.childControlWidth = true;
+            itemV.childForceExpandHeight = false;
+            itemV.childForceExpandWidth = false;
+            itemV.spacing = 20f;
+            itemV.padding = new RectOffset(0, 0, 0, 0);
         }
+
+
+        Canvas.ForceUpdateCanvases();
+        if (ScrollRectPila.verticalNormalizedPosition <= 0.05f)
+            ScrollRectPila.verticalNormalizedPosition = 0f;
     }
 
     void ResetEstado()
@@ -298,6 +350,7 @@ public class ControladorDeLaEscena : MonoBehaviour
         if (TextMetricas) TextMetricas.text = "";
     }
 }
+
 
 
 
